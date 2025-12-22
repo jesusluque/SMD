@@ -1,0 +1,13 @@
+[package]
+name = "smd_decoder"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# We will use a lightweight image library if possible, or just standard lib for parsing
+# For a robust PoC without massive dependencies, let's parse the JPEG header manually or use a small crate.
+# 'image' crate is good but might be heavy for a quick compile. Let's try to use it.
+image = { version = "0.24", default-features = false, features = ["jpeg"] }
