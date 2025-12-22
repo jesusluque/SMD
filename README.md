@@ -49,11 +49,74 @@ Together, these rules guarantee that at any point in a branching sequence, the *
 
 ## 4\. Complex Hierarchies: DAGs and Branching
 
-Beyond simple linear playlists, SMD is designed to handle complex, **non-linear media hierarchies** in which multiple Atoms form a Directed Acyclic Graph (DAG). This allows for interactive or adaptive streaming scenarios (such as multi-angle videos, branching storylines, or quality-bitrate switching). Key aspects of SMD's hierarchy support include:
+Beyond simple linear playlists, SMD is designed to handle complex, non-linear media hierarchies in which multiple Atoms form a Directed Acyclic Graph (DAG). This model enables not only interactive or adaptive streaming scenarios, but also **semantic structuring of content**, where hierarchy, compression strategy and narrative intent are tightly coupled.
 
-- **Hierarchical Layout:** Any given Atom may have **multiple "child" Atoms** that continue the sequence in different possible directions. For example, two Atoms might share a common predecessor but diverge into alternate branches (similar to a choose-your-own-adventure story, or switching between camera angles). Conversely, multiple branches might later **converge** back into a single Atom (for instance, a common ending segment reached from different story paths). The DAG structure does not contain cycles (no Atom replays once it's passed), preserving a directed flow of time.
-- **Timestamp Synchronization:** Because branching can lead to jumps in the content timeline, each Atom's **AtomStartTime** (from the Sequence Header) is used to align decoder state. When a player jumps from one branch to another (or merges into a converged node), it uses the AtomStartTime to **synchronize the decoder's internal timeline**. This ensures that time-dependent decoder operations (like order of frames or buffered audio) remain correct relative to the overall sequence. Essentially, the decoder can adjust its **temporal priors** or expectations based on the global timeline, so that even after a branch switch, it knows "where it is" in time.
-- **Parent-Only Awareness:** An important design principle is that each Atom only needs metadata about its **immediate predecessor** (the SourceUUID). An Atom is **not required to know the identities or existence of any subsequent Atoms** that follow it. This localized knowledge greatly improves robustness and flexibility: you can remove or add branches without modifying other atoms, and a player can handle missing or skipped segments gracefully. If a certain branch's next segment is unavailable (e.g. due to network issues or optional content), the player isn't stuck - it simply knows there are no further links from the last known segment and can terminate that path. This parent-linking scheme eliminates the need for a centralized manifest of the entire graph during playback, as the sequence can be navigated step-by-step.
+This allows SMD to support advanced use cases such as multi-angle videos, branching storylines, episodic chapters, alternative cuts, and quality or complexity adaptation without redefining the underlying media format.
+
+### 4.1 Hierarchical Layout and Narrative Structure
+
+Any given Atom may have multiple child Atoms that continue the sequence in different possible directions. These branches may represent:
+
+- Different narrative paths in an interactive story or documentary  
+- Alternative chapters or scenes depending on user choice or context  
+- Multiple points of view of the same event  
+- Distinct editorial cuts derived from a shared base sequence  
+
+Multiple Atoms may share a common predecessor that establishes a narrative context or visual baseline. From that point, branches can diverge into alternative storylines or perspectives, similar to a choose-your-own-adventure structure. Later, these branches may converge back into a shared Atom, such as a common ending, recap or synchronized event.
+
+Because the structure is a DAG and contains no cycles, the flow of time remains directed and deterministic. Once an Atom has been passed, it is never replayed implicitly, which preserves temporal consistency and simplifies decoder state management.
+
+### 4.2 Compression as a First-Class Hierarchical Concept
+
+In SMD, hierarchy is not limited to navigation or storytelling. It also defines **how compression is applied, adapted and evolved**.
+
+Different branches within the DAG may legitimately use different compression strategies while preserving decoder continuity and semantic alignment. Typical scenarios include:
+
+- A base branch using conservative, widely compatible compression  
+- A secondary branch switching to higher-efficiency or experimental compression  
+- An AI-enhanced branch introducing learned or perceptual compression models  
+- Low-latency branches prioritizing decode speed over fidelity  
+
+Because decoder logic is embedded, versioned and stateful, these transitions do not require re-encoding previously published Atoms or redefining container semantics. Compression becomes contextual and adaptive rather than globally fixed.
+
+This allows compression to follow narrative or functional intent, rather than constraining content design.
+
+### 4.3 Chapters, Episodes and Multiple Reproductions
+
+SMD hierarchies naturally support chapters and episodic structures. Each chapter may be represented as a subgraph with its own branching logic, compression profile or decoding behavior, while remaining linked to a shared origin Atom.
+
+This enables multiple valid reproductions of the same content, including:
+
+- Linear playback following a default editorial path  
+- Interactive playback where user decisions determine branches  
+- Context-aware playback driven by device capabilities or bandwidth  
+- Analytical playback where specific branches are accessed independently  
+
+All playback modes are derived from the same underlying DAG, without duplicating media assets or redefining formats.
+
+### 4.4 Timestamp Synchronization Across Branches
+
+Because branching may introduce discontinuities in the local playback timeline, each Atom includes an `AtomStartTime` defined in the Absolute Sequence Timeline.
+
+When a player jumps between branches or converges into a shared Atom, this timestamp is used to realign decoder state. Time-dependent decoding operations such as frame ordering, audio synchronization or predictive buffering remain coherent with respect to the global sequence.
+
+This mechanism ensures the decoder always knows its position in time, regardless of the playback path taken.
+
+### 4.5 Parent-Only Awareness and Structural Robustness
+
+Each Atom requires metadata only about its immediate predecessor via the `SourceUUID`. It does not need knowledge of downstream branches or future structure.
+
+This design improves robustness and evolvability:
+
+- Branches can be added or removed without modifying existing Atoms  
+- Optional or experimental paths can coexist with stable ones  
+- Missing branches do not break playback  
+- Navigation can proceed incrementally without a centralized manifest  
+
+If a branch terminates early or a successor Atom is unavailable, the player simply reaches a valid end state for that path.
+
+As a result, SMD enables **open-ended, evolvable media structures** in which narrative, compression and decoding logic can grow over time without invalidating previously published content.
+
 
 ## 5\. Termination: The EOSQ Signal
 
