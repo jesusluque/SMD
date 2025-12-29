@@ -23,13 +23,26 @@ pub extern "C" fn dealloc(ptr: *mut u8, size: usize) {
 }
 
 #[no_mangle]
-pub extern "C" fn decode(ptr: *const u8, len: usize) -> i32 {
+pub extern "C" fn decode(ptr: *const u8, len: usize, params_ptr: *const u8, params_len: usize) -> i32 {
     // Safety: We assume the host passes a valid pointer and length
     let data = unsafe { std::slice::from_raw_parts(ptr, len) };
+    let params = if params_len > 0 {
+        unsafe { std::slice::from_raw_parts(params_ptr, params_len) }
+    } else {
+        &[]
+    };
     
     println!("[Wasm Decoder] *** HELLO FROM INSIDE THE WASM SANDBOX! ***");
     println!("[Wasm Decoder] I am the one decoding this JPEG.");
-    println!("[Wasm Decoder] Received {} bytes.", len);
+    println!("[Wasm Decoder] Received {} bytes of media.", len);
+
+    if !params.is_empty() {
+        if let Ok(param_str) = std::str::from_utf8(params) {
+            println!("[Wasm Decoder] Received parameters: {}", param_str);
+            // TODO: Implement conditional decoding based on param_str
+            // e.g., if param_str == "view=left", crop left half
+        }
+    }
 
     // Try to decode the image from memory
     let cursor = Cursor::new(data);

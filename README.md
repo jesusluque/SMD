@@ -24,7 +24,23 @@ Every SMD Atom **must** contain a **Sequence Header** structure in its private m
 
 _Rationale:_ The Sequence Header provides enough information for a player to insert this Atom into a continuous playback timeline, even in complex scenarios like branching paths. Notably, the linkage is **backward-referencing only** (each node knows its parent, but not its children), which keeps each file self-sufficient and avoids forward dependencies. This backward-only reference model makes the system robust: even if a manifest is incomplete or some future segments are missing, any given Atom can still be played in sequence by following the chain of SourceUUID back to an origin.
 
-### 2.2. Logic Identity and Versioning
+### 2.2. Media Descriptor
+
+To facilitate content identification and player capabilities (e.g., selecting the right output mode), each Atom includes a **Media Descriptor**. This metadata describes the nature of the content without requiring the decoder to be instantiated first.
+
+- **MediaType:** A classification of the content type. Common values include:
+    - `image`: Static visual content.
+    - `video`: Time-based visual content.
+    - `audio`: Time-based auditory content.
+    - `model3d`: 3D geometry or volumetric data.
+- **MediaAttributes:** A set of flags or key-value pairs providing specific details, such as:
+    - `stereo-mode`: `left`, `right`, `side-by-side`, `top-bottom`.
+    - `projection`: `equirectangular` (for 360 video), `perspective`.
+    - `channels`: `mono`, `stereo`, `5.1`, `ambisonics`.
+
+This descriptor allows the player to make high-level decisions (e.g., "This is a 3D video, switch to VR mode") before decoding begins.
+
+### 2.3. Logic Identity and Versioning
 
 To support evolutionary upgrades of the decoder without requiring changes to already-published content, SMD embeds a **version-aware loading mechanism** for the decoder logic. Each Atom carries metadata identifying which decoder logic to use and if a new decoder module is provided. The **Logic Identity** metadata consists of:
 
@@ -35,6 +51,18 @@ To support evolutionary upgrades of the decoder without requiring changes to alr
 - If **absent**, the player is expected to already have the decoder logic available - either carried over from the **SourceUUID** ancestor or retrieved from a cache by matching the LogicFingerprint. In practice, the first Atom of a sequence will include the decoder payload, while subsequent Atoms might omit it if they use the same decoder or assume the player retained it from earlier.
 
 This design means that content creators can choose whether to ship the decoder with every segment or only when it changes. It also avoids duplication: a long sequence of segments that use the same decoder logic need not repeatedly embed the same Wasm binary, as long as the first segment (or some prior segment) provided it.
+
+### 2.4. Conditional Decoding and Parameters
+
+SMD supports **Conditional Decoding**, allowing the player to request specific representations or views of the content from the embedded decoder. This is achieved by passing a **Parameter Block** to the decoder at runtime.
+
+- **Parameter Block:** A structured data block (e.g., JSON or binary struct) passed from the player to the decoder's `decode` function.
+- **Use Cases:**
+    - **Stereoscopic 3D:** The player can request `view: "left"`, `view: "right"`, or `view: "anaglyph"` (e.g., Red-Cyan) from a single media atom containing stereo data.
+    - **Level of Detail:** Requesting a lower resolution or lower quality decode for performance.
+    - **Region of Interest:** Decoding only a specific crop of the video/image.
+
+The decoder logic is responsible for interpreting these parameters and returning the appropriate pixel buffer. This moves the complexity of handling formats like Side-by-Side or Top-Bottom 3D out of the player and into the content's own logic.
 
 ## 3\. The Upgrade and Continuity Protocol
 
@@ -117,15 +145,22 @@ If a branch terminates early or a successor Atom is unavailable, the player simp
 
 As a result, SMD enables **open-ended, evolvable media structures** in which narrative, compression and decoding logic can grow over time without invalidating previously published content.
 
+## 5\. Video and Time-Based Media
 
-## 5\. Termination: The EOSQ Signal
+While SMD can handle static assets, it is fully capable of supporting **Video** and other time-based media.
+
+- **Frame-based Decoding:** For video, the `decode` function can be called repeatedly or can return multiple frames. The decoder maintains internal state (e.g., reference frames) to handle inter-frame compression (P-frames, B-frames).
+- **Atom Granularity:** A video sequence is typically split into multiple Atoms (e.g., one Atom per GOP or per second). This allows for adaptive streaming and efficient seeking.
+- **Synchronization:** The `AtomStartTime` and `AtomDuration` ensure that video frames are displayed at the correct time, even if the decoder logic changes mid-stream.
+
+## 6\. Termination: The EOSQ Signal
 
 An SMD sequence (or a branch of a hierarchy) concludes when it encounters an **End of Sequence** marker, abbreviated **EOSQ**. EOSQ is a metadata signal carried in the final Atom of a sequence/branch to denote clean termination:
 
 - **EOSQ Definition:** EOSQ is represented as a specific marker bit or flag in the Atom's metadata (for example, a flag in the container's last cluster or segment info). When a player reads this marker at the end of an Atom, it indicates that **the current path has ended** - there are no further Atoms linked (this Atom has no children in the DAG). EOSQ essentially says "end of stream" for this branch.
 - **State Disposal:** Upon encountering EOSQ, the player knows it can safely **finalize or recycle the decoder instance**. The persistent WebAssembly decoder (and its associated memory state) can be purged from memory since its job is done - unless the same decoder logic (by LogicFingerprint) is also used for other sequences that might play soon, in which case the player might cache the compiled module for efficiency. The EOSQ is the point where the player may release resources like buffers or file handles associated with that sequence. However, SMD does not forbid reusing the decoder: if another sequence starts that requires the _same_ Wasm decoder (identified by matching fingerprint and version), the player can skip re-compiling and use the cached instance, provided it had retained it after EOSQ. This balances cleanup with optimization for subsequent playback.
 
-## 6\. Container Integration Matrix
+## 7\. Container Integration Matrix
 
 To implement the above features, SMD leverages custom metadata boxes or elements in existing container formats. The following table summarizes how key SMD concepts map to Matroska (MKV) and ISO Base Media (MP4) file structures:
 
@@ -139,7 +174,7 @@ To implement the above features, SMD leverages custom metadata boxes or elements
 
 _Notes:_ These mappings illustrate one way to implement SMD on the two popular container formats: - In Matroska, the extensible EBML structure allows adding new elements or using attachments and chapters to carry SMD info. For example, Matroska attachments already support including arbitrary files (like fonts or images), so including a Wasm decoder is a natural extension. - In MP4/ISOBMFF, the use of uuid (user-defined) boxes is a standard way to include custom metadata. Placing the SMD info in moof (for per-segment data like linkage) and in moov/meta (for global or initialization data like the decoder) keeps SMD data alongside the segments where needed. - The EOSQ via duration 0xFFFFFFFF is analogous to how MP4 signals an indefinite or till-end duration for a segment, effectively marking an end. In practice, a more explicit marker could be used if the format allows.
 
-## 7\. Performance and Optimization
+## 8\. Performance and Optimization
 
 SMD is built on WebAssembly, and to achieve native-like performance and scalability in decoding, the specification mandates support for the latest WebAssembly features and parallelism models:
 

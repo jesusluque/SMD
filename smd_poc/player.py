@@ -18,6 +18,16 @@ def play_atom(atom_path):
         print(f"  - Atom UUID: {uuid.UUID(bytes=atom_uuid)}")
         print(f"  - Timestamp: {start_time}s")
         
+        # 1.5 Read Media Descriptor
+        media_type_len = struct.unpack('>I', f.read(4))[0]
+        media_type = f.read(media_type_len).decode('utf-8')
+        attributes_len = struct.unpack('>I', f.read(4))[0]
+        attributes = f.read(attributes_len).decode('utf-8')
+        
+        print(f"  - Media Type: {media_type}")
+        if attributes:
+            print(f"  - Attributes: {attributes}")
+        
         # 2. Read Logic Identity
         logic_version = struct.unpack('>I', f.read(4))[0]
         logic_fingerprint = f.read(32)
@@ -97,6 +107,10 @@ def play_atom(atom_path):
             # mem_data = memory.data(store) # returns a memoryview/bytearray?
             # mem_data[ptr : ptr+len(media_data)] = media_data
             
+            # Allocate memory for params
+            params = b"view=left" # Example parameter
+            params_ptr = alloc(store, len(params))
+
             mem_data = memory.data_ptr(store)
             import ctypes
             
@@ -108,8 +122,12 @@ def play_atom(atom_path):
             
             ctypes.memmove(dst_addr, media_data, len(media_data))
             
+            # Write params
+            params_dst_addr = base_addr + params_ptr
+            ctypes.memmove(params_dst_addr, params, len(params))
+            
             # Call decode
-            result = decode(store, ptr, len(media_data))
+            result = decode(store, ptr, len(media_data), params_ptr, len(params))
             
             print(f"[Player] Wasm returned: {result}")
             
