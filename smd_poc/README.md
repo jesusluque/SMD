@@ -66,3 +66,30 @@ The player will:
 This PoC implements the **Logic Hot-Swap** mechanism described in the SMD spec using **real WebAssembly**.
 The player is generic and knows nothing about JPEGs. It relies entirely on the Wasm code provided *inside* the file to process the data.
 The Wasm module performs the heavy lifting (JPEG decoding) and returns raw pixel data to the host player for rendering.
+
+## DICOM Support
+
+This PoC also supports encoding and decoding **DICOM** medical images.
+
+### 1. Build the DICOM Decoder
+Navigate to `wasm_dicom` and compile the Rust code to WebAssembly:
+
+```bash
+cd wasm_dicom
+./build.sh
+cd ..
+```
+
+### 2. Create a DICOM SMD
+Use the helper script to package a valid `.dcm` file with the compiled decoder:
+
+```bash
+python3 create_dicom_smd.py path/to/scan.dcm output_scan.smd
+```
+
+### 3. Play/Decode
+The player detects the media type and uses the embedded Wasm decoder automatically. Since the logic travels with the media, the player doesn't need to know it's DICOM beforehand!
+
+```bash
+python3 player.py output_scan.smd
+```

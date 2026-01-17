@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+
+# Rust
+target/
+**/*.rs.bk
+
+# OS
+.DS_Store
+
+# Generated Artifacts (keep sample.jpg/dcm if needed for demo, but ignore output)
+*.smd
+decoded_output.png
+rendered_output.png
+example..jpg
+
+# Editor
+.vscode/
+
+# Build artifacts
+dist/
+build/
+*.spec

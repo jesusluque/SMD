@@ -4,7 +4,7 @@ import sys
 import os
 from wasmtime import Store, Module, Instance, Engine, Linker, WasiConfig
 
-def play_atom(atom_path):
+def play_atom(atom_path, params_input=""):
     print(f"Opening SMD Atom: {atom_path}")
     
     with open(atom_path, 'rb') as f:
@@ -108,7 +108,8 @@ def play_atom(atom_path):
             # mem_data[ptr : ptr+len(media_data)] = media_data
             
             # Allocate memory for params
-            params = b"view=left" # Example parameter
+            # Combine generic params or use input
+            params = params_input.encode('utf-8') if params_input else b""
             params_ptr = alloc(store, len(params))
 
             mem_data = memory.data_ptr(store)
@@ -175,7 +176,7 @@ def play_atom(atom_path):
                         plt.figure(figsize=(width/100, height/100), dpi=100) # Optional: try to match size
                         plt.imshow(img)
                         plt.axis('off') # Hide axes
-                        plt.title("Decoded from SMD Atom (Wasm)")
+                        plt.title(f"Decoded from SMD Atom (Wasm)\nParams: {params_input}")
                         plt.show()
                         
                     except ImportError as e:
@@ -184,8 +185,16 @@ def play_atom(atom_path):
                 else:
                     print("[Player] Error: Invalid output buffer from Wasm.")
             else:
-                print("[Player] Decode failed.")
-            
+                 print(f"[Player] Decode failed with error code: {result}")
+                 if result == 1:
+                     print("  -> Error: Failed to parse DICOM header.")
+                 elif result == 2:
+                     print("  -> Error: Failed to convert pixel data to image.")
+                 elif result == 3:
+                     print("  -> Error: Failed to decode pixel data.")
+                 else:
+                     print("  -> Error: Unknown error.")
+
         except Exception as e:
             print(f"[Player] Error executing Wasm decoder: {e}")
             import traceback
@@ -193,7 +202,10 @@ def play_atom(atom_path):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python player.py <file.smd>")
+        print("Usage: python player.py <file.smd> [param1=val1] [param2=val2]...")
         sys.exit(1)
-        
-    play_atom(sys.argv[1])
+    
+    file_path = sys.argv[1]
+    params = " ".join(sys.argv[2:])
+    
+    play_atom(file_path, params)

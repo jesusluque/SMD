@@ -4,7 +4,7 @@ import hashlib
 import sys
 import os
 
-def create_atom(image_path, decoder_path, output_path, media_type="image", attributes=""):
+def create_atom(image_path, decoder_path, output_path, media_type="image", attributes="", source_uuid_bytes=None, origin_uuid_bytes=None, duration=0.0):
     # 1. Read Media Data
     with open(image_path, 'rb') as f:
         media_data = f.read()
@@ -15,10 +15,19 @@ def create_atom(image_path, decoder_path, output_path, media_type="image", attri
     
     # 3. Construct Metadata
     atom_uuid = uuid.uuid4().bytes
-    source_uuid = uuid.uuid4().bytes # Dummy for PoC
-    origin_uuid = uuid.uuid4().bytes # Dummy for PoC
+    
+    if source_uuid_bytes is None:
+        source_uuid = uuid.uuid4().bytes
+    else:
+        source_uuid = source_uuid_bytes
+        
+    if origin_uuid_bytes is None:
+        origin_uuid = uuid.uuid4().bytes
+    else:
+        origin_uuid = origin_uuid_bytes
+
     start_time = 0.0
-    duration = 5.0 # 5 seconds dummy duration
+    # duration is passed as arg
     
     logic_version = 1
     logic_fingerprint = hashlib.sha256(logic_payload).digest()
